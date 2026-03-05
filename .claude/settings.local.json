@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\(''mcpServers'', {}\\), indent=2\\)\\)\")",
+      "WebFetch(domain:docs.getdbt.com)",
+      "Bash(pip install:*)",
+      "Bash(python3:*)",
+      "Bash(.venv/bin/pip install:*)",
+      "Bash(brew list)",
+      "Read(//usr/local/bin/**)",
+      "Read(//opt/homebrew/bin/**)",
+      "Bash(rm:*)",
+      "Bash(.venv/bin/dbt-cloud-migrate check:*)",
+      "Bash(.venv/bin/dbt-cloud-migrate fix:*)",
+      "Bash(claude mcp:*)"
+    ]
+  }
+}

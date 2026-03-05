@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dbt-cloud-migrate"
+version = "0.1.0"
+description = "Refactoring tool to migrate dbt Core projects to dbt Cloud"
+requires-python = ">=3.10"
+dependencies = [
+    "typer>=0.12.0",
+    "rich>=13.0.0",
+    "pyyaml>=6.0",
+    "mcp>=1.0.0",
+]
+
+[project.scripts]
+dbt-cloud-migrate = "dbt_cloud_migrate.cli:app"
+dbt-cloud-migrate-mcp = "dbt_cloud_migrate.mcp_server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

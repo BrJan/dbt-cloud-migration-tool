@@ -1,0 +1,3 @@
+[console_scripts]
+dbt-cloud-migrate = dbt_cloud_migrate.cli:app
+dbt-cloud-migrate-mcp = dbt_cloud_migrate.mcp_server:main
