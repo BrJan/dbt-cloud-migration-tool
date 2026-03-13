@@ -1,27 +1,52 @@
 """
 dbt Cloud Migration MCP Server
 
-Exposes the migration checks as MCP tools so Claude (Desktop, Code, or API)
-can call them directly while helping users refactor their dbt projects.
+Exposes migration audit tools as MCP tools designed to work alongside the
+official dbt MCP server (uvx dbt-mcp). While the dbt MCP server handles
+running dbt commands (compile, build, test, show) and querying dbt Cloud
+APIs, this server audits your project for migration readiness issues —
+profiles configuration, project structure, and deprecated syntax.
+
+Recommended workflow with both servers:
+  1. Run check_project or check_deprecations to identify issues
+  2. Use fix_deprecations to auto-fix safe issues
+  3. Use the dbt MCP server's compile/build tools to validate the fixes
 
 Usage:
-  dbt-cloud-migrate-mcp          # stdio transport (for Claude Desktop)
-  dbt-cloud-migrate-mcp --port 8000  # SSE transport (for remote clients)
+  dbt-cloud-migrate-mcp          # stdio transport (default)
 
-Configure in Claude Desktop's config (~/Library/Application Support/Claude/claude_desktop_config.json):
+Configure in Claude Desktop (~/Library/Application Support/Claude/claude_desktop_config.json):
 
   {
     "mcpServers": {
+      "dbt": {
+        "command": "uvx",
+        "args": ["dbt-mcp"],
+        "env": {
+          "DBT_PROJECT_DIR": "/path/to/your/dbt/project",
+          "DBT_PATH": "/path/to/dbt"
+        }
+      },
       "dbt-cloud-migrate": {
         "command": "dbt-cloud-migrate-mcp"
       }
     }
   }
 
-Configure in Claude Code (~/.claude/settings.json):
+Configure in Claude Code — add both servers:
+
+  claude mcp add dbt -s user -- uvx dbt-mcp
+  claude mcp add dbt-cloud-migrate -s user -- dbt-cloud-migrate-mcp
+
+Or manually in ~/.claude.json:
 
   {
     "mcpServers": {
+      "dbt": {
+        "type": "stdio",
+        "command": "uvx",
+        "args": ["dbt-mcp"]
+      },
       "dbt-cloud-migrate": {
         "type": "stdio",
         "command": "dbt-cloud-migrate-mcp"
@@ -70,7 +95,9 @@ async def list_tools() -> list[types.Tool]:
             description=(
                 "Run all dbt Core → dbt Cloud migration checks against a project directory. "
                 "Returns a full JSON report with errors, warnings, and actionable fix guidance "
-                "for: profiles.yml migration, project structure, and deprecated syntax."
+                "for: profiles.yml migration, project structure, and deprecated syntax. "
+                "Use this alongside the dbt MCP server: after fixing issues found here, "
+                "use the dbt MCP server's compile or build tools to validate the project compiles cleanly."
             ),
             inputSchema={
                 "type": "object",
@@ -88,7 +115,9 @@ async def list_tools() -> list[types.Tool]:
             description=(
                 "Analyze a dbt project's profiles.yml and generate dbt Cloud connection migration guidance. "
                 "Detects hardcoded credentials, maps adapter types to Cloud connection types, "
-                "and suggests DBT_ENV_SECRET_ variable naming conventions."
+                "and suggests DBT_ENV_SECRET_ variable naming conventions. "
+                "In dbt Cloud, profiles.yml is replaced by environment-level connections — "
+                "this tool identifies exactly what needs to move where."
             ),
             inputSchema={
                 "type": "object",
@@ -144,7 +173,9 @@ async def list_tools() -> list[types.Tool]:
             description=(
                 "Auto-fix safe, mechanical deprecation issues in a dbt project. "
                 "Fixes: deprecated dbt_project.yml keys and 'tests:' → 'data_tests:' in YAML files. "
-                "Use dry_run=true to preview changes without modifying files."
+                "Use dry_run=true to preview changes without modifying files. "
+                "After running fixes, use the dbt MCP server's compile tool to confirm the project "
+                "still parses and compiles correctly."
             ),
             inputSchema={
                 "type": "object",
@@ -241,28 +272,9 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
 def main() -> None:
     import asyncio
-    import argparse
 
-    parser = argparse.ArgumentParser(description="dbt Cloud Migration MCP Server")
-    parser.add_argument("--port", type=int, default=None, help="Port for SSE transport (omit for stdio)")
-    args = parser.parse_args()
-
-    if args.port:
-        # SSE transport
-        import mcp.server.sse as sse_transport
-        from starlette.applications import Starlette
-        from starlette.routing import Route
-        import uvicorn
-
-        async def handle_sse(request):
-            async with sse_transport.SseServerTransport("/messages") as (read, write):
-                await server.run(read, write, server.create_initialization_options())
-
-        starlette_app = Starlette(routes=[Route("/sse", endpoint=handle_sse)])
-        uvicorn.run(starlette_app, host="0.0.0.0", port=args.port)
-    else:
-        # stdio transport (default, for Claude Desktop / Claude Code)
-        asyncio.run(mcp.server.stdio.stdio_server(server))
+    # stdio transport — same pattern as the official dbt MCP server (uvx dbt-mcp)
+    asyncio.run(mcp.server.stdio.stdio_server(server))
 
 
 if __name__ == "__main__":

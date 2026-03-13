@@ -1,10 +1,20 @@
 # dbt-cloud-migrate
 
-A CLI tool and MCP server that audits dbt Core projects and generates actionable guidance for migrating to dbt Cloud.
+A CLI tool and MCP server that audits dbt Core projects and generates actionable guidance for migrating to dbt Cloud. Designed to work alongside the [official dbt MCP server](https://github.com/dbt-labs/dbt-mcp).
 
-## What it does
+## How it fits with the dbt MCP server
 
-`dbt-cloud-migrate` scans your dbt project and reports issues across three areas:
+| Tool | Role |
+|------|------|
+| **dbt MCP server** (`uvx dbt-mcp`) | Runs dbt commands (`compile`, `build`, `test`, `show`), queries the Semantic Layer, Discovery API, and Admin API |
+| **dbt-cloud-migrate** (this tool) | Audits your project for migration blockers: profiles config, structure issues, deprecated syntax |
+
+The typical workflow is:
+1. Run `check_project` or `check_deprecations` to find migration issues
+2. Run `fix_deprecations` to auto-fix safe changes
+3. Use the dbt MCP server's `compile` or `build` tools to confirm the project still works
+
+## What it checks
 
 - **Profiles migration** — analyzes `profiles.yml`, maps adapter types to dbt Cloud connection types, flags hardcoded credentials, and generates recommended `DBT_ENV_SECRET_` environment variable mappings
 - **Project structure** — checks model layer organization (staging/intermediate/marts), naming conventions (`stg_`, `int_`, `fct_`, `dim_`), source YAML definitions, documentation coverage, primary key test coverage, and `.gitignore` settings
@@ -22,6 +32,90 @@ cd dbt-refactoring-tool
 python3 -m venv .venv
 .venv/bin/pip install -e .
 ```
+
+## MCP Server Setup
+
+### Prerequisites
+
+Install `uv` for the dbt MCP server:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### Claude Code — add both servers
+
+```bash
+# Official dbt MCP server
+claude mcp add dbt -s user -- uvx dbt-mcp
+
+# Migration audit server (this tool)
+claude mcp add dbt-cloud-migrate -s user -- dbt-cloud-migrate-mcp
+```
+
+Set your project path for the dbt MCP server — edit `~/.claude.json` and add env vars:
+
+```json
+{
+  "mcpServers": {
+    "dbt": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["dbt-mcp"],
+      "env": {
+        "DBT_PROJECT_DIR": "/path/to/your/dbt/project",
+        "DBT_PATH": "/path/to/dbt"
+      }
+    },
+    "dbt-cloud-migrate": {
+      "type": "stdio",
+      "command": "dbt-cloud-migrate-mcp"
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "dbt": {
+      "command": "uvx",
+      "args": ["dbt-mcp"],
+      "env": {
+        "DBT_PROJECT_DIR": "/path/to/your/dbt/project",
+        "DBT_PATH": "/path/to/dbt"
+      }
+    },
+    "dbt-cloud-migrate": {
+      "command": "dbt-cloud-migrate-mcp"
+    }
+  }
+}
+```
+
+### Available MCP tools
+
+**dbt-cloud-migrate tools** (this server):
+
+| Tool | Description |
+|------|-------------|
+| `check_project` | Run all migration checks and return a full JSON report |
+| `check_profiles` | Analyze `profiles.yml` and generate Cloud connection guidance |
+| `check_structure` | Audit model organization, naming, sources, docs, and tests |
+| `check_deprecations` | Scan for deprecated syntax and configuration |
+| `fix_deprecations` | Auto-fix deprecated keys and `tests:` → `data_tests:`. Supports `dry_run: true` |
+
+**dbt MCP server tools** (complement these with):
+
+| Tool | Description |
+|------|-------------|
+| `dbt_compile` | Compile models to validate SQL after fixes |
+| `dbt_build` | Run and test models end-to-end |
+| `dbt_show` | Preview model output |
+| `list_metrics` | Query the Semantic Layer |
 
 ## CLI Usage
 
@@ -79,10 +173,10 @@ dbt-cloud-migrate fix . --dry-run
 dbt-cloud-migrate fix .
 ```
 
-The `--fix` flag on the `check` command also applies these fixes inline:
+After fixing, validate with the dbt MCP server or CLI:
 
 ```bash
-dbt-cloud-migrate check . --fix
+dbt compile
 ```
 
 ### Version
@@ -90,59 +184,6 @@ dbt-cloud-migrate check . --fix
 ```bash
 dbt-cloud-migrate version
 ```
-
-## MCP Server
-
-`dbt-cloud-migrate` ships an MCP server that exposes its checks as tools, allowing Claude (Desktop, Code, or API) to audit and fix dbt projects during a conversation.
-
-### Start the server
-
-```bash
-# stdio transport (default, for Claude Desktop / Claude Code)
-dbt-cloud-migrate-mcp
-
-# SSE transport (for remote clients)
-dbt-cloud-migrate-mcp --port 8000
-```
-
-### Configure in Claude Desktop
-
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "dbt-cloud-migrate": {
-      "command": "dbt-cloud-migrate-mcp"
-    }
-  }
-}
-```
-
-### Configure in Claude Code
-
-Add to `~/.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "dbt-cloud-migrate": {
-      "type": "stdio",
-      "command": "dbt-cloud-migrate-mcp"
-    }
-  }
-}
-```
-
-### Available MCP tools
-
-| Tool | Description |
-|------|-------------|
-| `check_project` | Run all checks and return a full JSON report |
-| `check_profiles` | Analyze `profiles.yml` and generate Cloud connection guidance |
-| `check_structure` | Audit model organization, naming, sources, docs, and tests |
-| `check_deprecations` | Scan for deprecated syntax and configuration |
-| `fix_deprecations` | Auto-fix deprecated keys and `tests:` → `data_tests:`. Supports `dry_run: true` |
 
 ## Checks reference
 
